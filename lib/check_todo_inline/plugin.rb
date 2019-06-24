@@ -1,33 +1,38 @@
 module Danger
-  # This is your plugin class. Any attributes or methods you expose here will
-  # be available from within your Dangerfile.
-  #
-  # To be published on the Danger plugins site, you will need to have
-  # the public interface documented. Danger uses [YARD](http://yardoc.org/)
-  # for generating documentation from your plugin source, and you can verify
-  # by running `danger plugins lint` or `bundle exec rake spec`.
-  #
-  # You should replace these comments with a public description of your library.
-  #
-  # @example Ensure people are well warned about merging on Mondays
-  #
-  #          my_plugin.warn_on_mondays
-  #
-  # @see  WataruSuzuki/danger-check_todo_inline
-  # @tags monday, weekends, time, rattata
-  #
-  class DangerCheckTodoInline < Plugin
+    class DangerCheckTodoInline < Plugin
 
-    # An attribute that you can read/write from your Dangerfile
-    #
-    # @return   [Array<String>]
-    attr_accessor :my_attribute
+        attr_accessor :diff_files
+        def diff_files
+            return diff_files = (git.modified_files - git.deleted_files) + git.added_files
+        end
 
-    # A method that you can call from your Dangerfile
-    # @return   [Array<String>]
-    #
-    def warn_on_mondays
-      warn 'Trying to merge code on a Monday' if Date.today.wday == 1
+        def check_todo_inline
+            diff_files.each do |target|
+                unless target == "Dangerfile"
+                    diff = git.diff_for_file(target)
+
+                    index = 0
+                    offset = 0
+
+                    diff.patch.each_line do |line|
+                        if line.start_with?("+") && ((/\/\/\ Todo/i =~ line) || (/\/\/\Todo/i =~ line))
+                            warn("TODOが残っています", file: target, line: (index + offset))
+                        end
+                        unless offset == 0 || line.start_with?("-")
+                            index = index + 1
+                        end
+                        if line.include? "@@"
+                            # Note: diff.patchからinlineコメントするための行数を取得する
+                            line = line[line.index("+"), line.length]
+                            if line.include?(",")
+                                line = line[1, (line.index(",") - 1)]
+                                offset = line.to_i
+                                index = 0
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
-  end
 end
